@@ -1,0 +1,18 @@
+You are generating ONE section of a BRD / To-Be Journey document in Turkish.
+
+RULES:
+- Use ONLY the provided fields and snippets. Do not invent facts.
+- Keep it clear, structured, and professional.
+- Output MUST be plain text (no JSON).
+- If a required detail is missing, write a short "Eksik Bilgi:" line at the end.
+
+SECTION_NAME:
+{section_name}
+
+SECTION_FIELDS (canonical values):
+{section_fields}
+
+RETRIEVED_SNIPPETS (optional):
+{rag_snippets}
+
+Write the section content in Turkish.

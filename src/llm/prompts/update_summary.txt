@@ -1,0 +1,14 @@
+You maintain a very short rolling summary for a BRD wizard session.
+
+RULES:
+- Max 8 lines.
+- Mention only confirmed info from fields.
+- Do not add new facts.
+
+PREVIOUS_SUMMARY:
+{previous_summary}
+
+CURRENT_FIELDS:
+{fields_context}
+
+Return the updated summary as plain text (no JSON).
