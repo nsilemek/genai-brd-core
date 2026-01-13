@@ -37,7 +37,7 @@ class SessionState:
 
     # RAG
     rag_index_id: Optional[str] = None
-    uploaded_files: List[Dict[str, Any]] = field(default_factory=list)  # {name,path,type,size}
+    uploaded_files: List[Dict[str, Any]] = field(default_factory=list)  # {name,path,type,size,ts}
 
     # Latest scoring snapshot (store as dict to avoid tight coupling)
     scores: Optional[Dict[str, Any]] = None
@@ -45,3 +45,14 @@ class SessionState:
     # Optional: current step tracking
     current_field: Optional[FieldName] = None
     last_question_ids: List[str] = field(default_factory=list)
+
+    # -----------------------------
+    # Intake / PDF Gate (Demo flow)
+    # -----------------------------
+    pdf_gate_done: bool = False           # "Slide var mı?" sorusu soruldu mu?
+    pdf_uploaded_path: Optional[str] = None  # user upload ettiği PDF path
+    pdf_summary: str = ""                 # LLM/stub ile çıkarılan kısa özet
+    pdf_applied_to_background: bool = False  # Background'a eklendi mi?
+
+    # Optional: privacy analysis output (future extension)
+    privacy_ruleset_output: Optional[Dict[str, Any]] = None

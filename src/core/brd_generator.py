@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from .context_builder import build_rag_snippets
+from ..llm.context_builder import build_rag_snippets
 from ..llm.client import LLMClient
+from .config import USE_LLM
 
 
 # Section -> which fields it uses
@@ -29,6 +30,52 @@ def _format_section_fields(fields: Dict[str, Any], keys: List[str], max_chars: i
     return text[:max_chars]
 
 
+def _template_section(section_name: str, fields: Dict[str, Any]) -> str:
+    """
+    Deterministic preview used when USE_LLM=0.
+    Goal: Always produce a nice-looking BRD preview for demo.
+    """
+    if section_name == "Background":
+        bg = (fields.get("Background") or "").strip()
+        tgt = (fields.get("Target Customer Group") or "").strip()
+        return (
+            f"## Background\n"
+            f"{bg if bg else '(Background missing)'}\n\n"
+            f"**Target Customer Group:** {tgt if tgt else '(missing)'}"
+        ).strip()
+
+    if section_name == "Impacts":
+        ch = (fields.get("Impacted Channels") or "").strip()
+        j = (fields.get("Impacted Journey") or "").strip()
+        return (
+            f"## Impacts\n"
+            f"**Impacted Channels:** {ch if ch else '(missing)'}\n"
+            f"**Impacted Journey:** {j if j else '(missing)'}"
+        ).strip()
+
+    if section_name == "Journey Description":
+        jd = (fields.get("Journeys Description") or "").strip()
+        return (
+            f"## Journey Description\n"
+            f"{jd if jd else '(Journeys Description missing)'}"
+        ).strip()
+
+    if section_name == "Expected Results":
+        er = (fields.get("Expected Results") or "").strip()
+        rep = (fields.get("Reports Needed") or "").strip()
+        tf = (fields.get("Traffic Forecast") or "").strip()
+        return (
+            f"## Expected Results\n"
+            f"{er if er else '(Expected Results missing)'}\n\n"
+            f"**Reports Needed:** {rep if rep else '(missing)'}\n"
+            f"**Traffic Forecast:** {tf if tf else '(missing)'}"
+        ).strip()
+
+    # fallback
+    keys = SECTION_MAP.get(section_name, [])
+    return f"## {section_name}\n{_format_section_fields(fields, keys)}"
+
+
 class BRDGenerator:
     def __init__(self, llm: Optional[LLMClient] = None):
         self.llm = llm or LLMClient()
@@ -39,6 +86,10 @@ class BRDGenerator:
         fields: Dict[str, Any],
         rag_snippets: Optional[List[str]] = None,
     ) -> str:
+        # Demo-safe: no LLM calls when USE_LLM=0
+        if not USE_LLM:
+            return _template_section(section_name, fields)
+
         keys = SECTION_MAP.get(section_name, [])
         section_fields = _format_section_fields(fields, keys)
 

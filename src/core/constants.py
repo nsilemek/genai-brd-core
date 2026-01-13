@@ -9,6 +9,7 @@ BRD_FIELDS = [
     "Journeys Description",
     "Reports Needed",
     "Traffic Forecast",
+    "Privacy / Compliance",
 ]
 
 SUBMIT_THRESHOLD = 70  # (your compute_scores_from_fields uses this logic)
