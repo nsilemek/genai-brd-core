@@ -5,10 +5,9 @@ from typing import Any, Dict, Optional
 
 from ..rag.retriever import retrieve_snippets_for_flow
 
-
 from ..llm.client import LLMClient
 from ..llm.context_builder import build_fields_context, build_rag_snippets, field_desc
-from .config import USE_LLM  # single source of truth
+from .config import use_llm  # ✅ runtime read (NOT import-time snapshot)
 
 from .state import (
     load_session,
@@ -119,11 +118,14 @@ def normalize_answer(
     fields: dict,
     rag_snippets=None,
 ) -> Dict[str, Any]:
-    if not USE_LLM:
+    # ✅ IMPORTANT: runtime flag (Streamlit reload + env changes work)
+    if not use_llm():
         return normalize_answer_stub(field_name, user_text)
+
     try:
         return normalize_answer_llm(field_name, user_text, fields, rag_snippets=rag_snippets)
     except Exception:
+        # demo-safe fallback
         return normalize_answer_stub(field_name, user_text)
 
 
@@ -135,7 +137,8 @@ def summarize_pdf_to_background(pdf_text: str, fields: Dict[str, Any]) -> str:
     PDF text'inden Background paragrafı üretir.
     NOT: src/llm/prompts/pdf_to_background.txt dosyanız olmalı.
     """
-    if not USE_LLM:
+    # ✅ runtime flag
+    if not use_llm():
         return ""
 
     llm = _get_llm()
@@ -194,8 +197,10 @@ def _build_bot_payload(
         "pdf_summary": getattr(state, "pdf_summary", ""),
         "pdf_applied_to_background": getattr(state, "pdf_applied_to_background", False),
         "privacy_ruleset_output": getattr(state, "privacy_ruleset_output", None),
-        # RAG debug (opsiyonel, UI göstermese de payload'da dursun)
+        # RAG debug (opsiyonel)
         "rag_index_id": getattr(state, "rag_index_id", None),
+        # LLM debug (opsiyonel)
+        "use_llm": bool(use_llm()),
     }
 
 
@@ -308,10 +313,9 @@ def handle_user_message(
     # ✅ 2) RAG: normalize_answer çağırmadan hemen önce
     rag_snips = []
     if getattr(state, "rag_index_id", None):
-        # query: field + user text (basit ama işe yarar)
         q = f"{current_field}: {user_text}"
         try:
-            rag_snips = retrieve_snippets(index_id=state.rag_index_id, query=q, top_k=4)
+            rag_snips = retrieve_snippets_for_flow(index_id=state.rag_index_id, query=q, top_k=4)
         except Exception as e:
             # RAG asla wizard'ı kırmamalı
             print("RAG error:", e)
