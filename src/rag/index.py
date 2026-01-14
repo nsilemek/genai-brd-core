@@ -12,6 +12,17 @@ except Exception:
     requests = None
 
 
+def _env_bool(key: str, default: str = "0") -> bool:
+    return os.getenv(key, default).strip() in ("1", "true", "True", "yes", "YES")
+
+
+def _safe_float(val: str, default: float) -> float:
+    try:
+        return float((val or "").strip())
+    except Exception:
+        return float(default)
+
+
 @dataclass
 class RAGIndex:
     """
@@ -55,7 +66,13 @@ class VectorStore:
         self.gemma_url = os.getenv("GEMMA_EMBEDDING_URL", "").strip()
         self.gemma_api_key = os.getenv("GEMMA_API_KEY", "").strip()
         self.gemma_model = os.getenv("GEMMA_MODEL", "gemma-300").strip()
-        self.embedding_timeout = float(os.getenv("EMBEDDING_TIMEOUT_SEC", "30") or "30")
+
+        # Gateway metadata (LLM ile aynı mantık)
+        self.gemma_md_user = os.getenv("GEMMA_METADATA_USERNAME", "").strip()
+        self.gemma_md_pwd = os.getenv("GEMMA_METADATA_PASSWORD", "").strip()
+
+        self.embedding_timeout = _safe_float(os.getenv("EMBEDDING_TIMEOUT_SEC", "30"), 30.0)
+        self.embedding_verify_ssl = _env_bool("EMBEDDING_VERIFY_SSL", "1")
 
         # -------------------------
         # Chroma import demo-safe
@@ -78,6 +95,7 @@ class VectorStore:
         if self.embedding_mode == "local":
             try:
                 from sentence_transformers import SentenceTransformer
+
                 self.embedder = SentenceTransformer(embedding_model)
             except Exception as e:
                 print(f"[RAG] Warning: Could not load embedding model '{embedding_model}': {e}")
@@ -139,15 +157,23 @@ class VectorStore:
                 "Content-Type": "application/json",
             }
 
-            # Most common schema:
-            # { "model": "gemma-300", "input": ["text1", "text2"] }
-            payload = {"model": self.gemma_model, "input": texts}
+            # Common schema:
+            # { "model": "gemma-300", "input": ["text1", "text2"], "metadata": {...} }
+            payload: Dict[str, Any] = {
+                "model": self.gemma_model,
+                "input": texts,
+            }
+
+            # ✅ Gateway metadata (LLM ile aynı mantık)
+            if self.gemma_md_user and self.gemma_md_pwd:
+                payload["metadata"] = {"username": self.gemma_md_user, "pwd": self.gemma_md_pwd}
 
             r = requests.post(
                 self.gemma_url,
                 json=payload,
                 headers=headers,
                 timeout=self.embedding_timeout,
+                verify=self.embedding_verify_ssl,
             )
             r.raise_for_status()
             data = r.json()
@@ -155,27 +181,27 @@ class VectorStore:
             # Try common response shapes:
             # 1) OpenAI-like: {"data":[{"embedding":[...]}, ...]}
             if isinstance(data, dict) and isinstance(data.get("data"), list):
-                embs = []
+                out: List[List[float]] = []
                 for item in data["data"]:
                     if isinstance(item, dict) and isinstance(item.get("embedding"), list):
-                        embs.append(item["embedding"])
-                if embs:
-                    return embs
+                        out.append([float(x) for x in item["embedding"]])
+                if out:
+                    return out
 
             # 2) {"embeddings":[[...],[...]]}
             if isinstance(data, dict) and isinstance(data.get("embeddings"), list):
                 embs = data["embeddings"]
                 if embs and isinstance(embs[0], list):
-                    return embs
+                    return [[float(x) for x in row] for row in embs]
 
-            # 3) {"output":[[...],[...]]} or {"vectors":[...]}
+            # 3) {"output":[[...],[...]]} or {"vectors":[...]} or {"vector":[...]}
             for key in ("output", "vectors", "vector"):
                 if isinstance(data, dict) and isinstance(data.get(key), list):
                     v = data[key]
                     if v and isinstance(v[0], list):
-                        return v
+                        return [[float(x) for x in row] for row in v]
 
-            raise ValueError("Unknown Gemma embedding response schema")
+            raise ValueError(f"Unknown Gemma embedding response schema: {str(data)[:300]}")
 
         # default: local
         if self.embedder is None:
@@ -252,7 +278,10 @@ class VectorStore:
 
         # Embedding yoksa demo-safe boş dön
         try:
-            query_embedding = self._embed([query_text])[0]
+            q_embs = self._embed([query_text])
+            if not q_embs:
+                return []
+            query_embedding = q_embs[0]
         except Exception:
             return []
 
