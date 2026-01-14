@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 
 from .json_parser import parse_json_strict
 
 
+# -------------------------
+# Env helpers
+# -------------------------
 def _env_bool(key: str, default: str = "0") -> bool:
     return os.getenv(key, default).strip() in ("1", "true", "True", "yes", "YES")
 
@@ -30,13 +33,20 @@ def _safe_float(val: str, default: float) -> float:
         return float(default)
 
 
+# -------------------------
+# Client
+# -------------------------
 class LLMClient:
     """
     Single entry point for LLM calls.
 
     Hackathon-mode:
     - USE_LLM=0 => never calls external model, returns safe stub outputs
-    - USE_LLM=1 => calls _call_model() with endpoint config
+    - USE_LLM=1 => calls endpoint (openai-compatible or custom)
+
+    Supported gateway patterns:
+      - OpenAI-compatible chat completions (/v1/chat/completions)
+      - Practicus/Vodafone gateway that expects extra auth in payload["metadata"] = {"username": "...", "pwd": "..."}
     """
 
     def __init__(self, prompts_dir: str = "src/llm/prompts"):
@@ -54,6 +64,13 @@ class LLMClient:
         self.api_key = _env_str("LLM_API_KEY", "")
         self.model = _env_str("LLM_MODEL", "")
 
+        # Practicus/Vodafone metadata auth (optional)
+        self.md_username = _env_str("LLM_METADATA_USERNAME", "")
+        self.md_password = _env_str("LLM_METADATA_PASSWORD", "")
+
+        # SSL verify (enterprise cert/proxy)
+        self.verify_ssl = _env_bool("LLM_VERIFY_SSL", "1")
+
         # Custom endpoint config
         self.endpoint = _env_str("LLM_ENDPOINT", "")
         self.header_name = _env_str("LLM_HEADER_NAME", "Authorization")
@@ -62,7 +79,7 @@ class LLMClient:
         # Optional knobs
         self.temperature = _safe_float(_env_str("LLM_TEMPERATURE", "0.2"), 0.2)
 
-        # Some gateways prefer max_output_tokens; keep optional
+        # Some gateways use max_output_tokens; default to OpenAI field "max_tokens"
         self.openai_token_field = _env_str("LLM_OPENAI_TOKEN_FIELD", "max_tokens").strip() or "max_tokens"
 
     def _load_prompt(self, name: str) -> str:
@@ -94,11 +111,10 @@ class LLMClient:
 
         raw = self._call_model(prompt, max_output_tokens=max_output_tokens)
 
-        # strict parse; if it fails, fallback to best-effort
         try:
             return parse_json_strict(raw)
         except Exception:
-            # Fallback: keep demo alive
+            # keep wizard alive
             return {
                 "value": raw.strip(),
                 "confidence": 0.5,
@@ -130,9 +146,7 @@ class LLMClient:
     # Stubs (demo mode)
     # -------------------------
     def _stub_json(self, prompt_name: str, variables: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Prompt-aware stub. Keeps pipeline running without LLM.
-        """
+        # normalize_answer.txt expected output
         if "normalize_answer" in prompt_name:
             user_answer = str(variables.get("user_answer", "")).strip()
             return {
@@ -150,9 +164,6 @@ class LLMClient:
         }
 
     def _stub_text(self, prompt_name: str, variables: Dict[str, Any]) -> str:
-        """
-        Text stub for preview generation etc.
-        """
         if "generate_section" in prompt_name:
             section = variables.get("section_name", "Section")
             content = variables.get("fields_context", "") or variables.get("user_answer", "")
@@ -171,7 +182,7 @@ class LLMClient:
           - LLM_MODE=openai : OpenAI-compatible chat completions
           - LLM_MODE=custom : LLM_ENDPOINT JSON API
 
-        Any exception here will be caught by callers (flow has fallbacks),
+        Any exception here will be caught by flow fallbacks,
         so wizard won't crash.
         """
         mode = (self.mode or "openai").lower()
@@ -188,21 +199,34 @@ class LLMClient:
         if self.header_value:
             headers[self.header_name] = self.header_value
 
-        payload = {
+        payload: Dict[str, Any] = {
             "prompt": prompt,
             "model": self.model or None,
             "max_output_tokens": int(max_output_tokens),
             "temperature": float(self.temperature),
         }
 
-        r = requests.post(endpoint, json=payload, headers=headers, timeout=self.timeout_sec)
+        # Optional metadata auth (if custom gateway uses it too)
+        md = self._build_metadata()
+        if md:
+            payload["metadata"] = md
+
+        r = requests.post(
+            endpoint,
+            json=payload,
+            headers=headers,
+            timeout=self.timeout_sec,
+            verify=self.verify_ssl,
+        )
         if not r.ok:
             raise RuntimeError(f"Custom LLM HTTP {r.status_code}: {r.text[:500]}")
+
         try:
             data = r.json()
         except Exception:
             return r.text
 
+        # Common shapes
         if isinstance(data, dict):
             if isinstance(data.get("text"), str):
                 return data["text"]
@@ -225,16 +249,32 @@ class LLMClient:
         """
         Accepts:
           - LLM_BASE_URL = https://host
-          - LLM_BASE_URL = https://host/v1
-          - LLM_BASE_URL = https://host/v1/chat/completions
+          - LLM_BASE_URL = https://host/.../latest
+          - LLM_BASE_URL = https://host/.../latest/v1
+          - LLM_BASE_URL = https://host/.../latest/v1/chat/completions
         Returns final url ending with /v1/chat/completions
         """
-        base = self.base_url.rstrip("/")
+        base = (self.base_url or "").rstrip("/")
+        if not base:
+            return ""
+
         if base.endswith("/v1/chat/completions"):
             return base
         if base.endswith("/v1"):
             return base + "/chat/completions"
         return base + "/v1/chat/completions"
+
+    def _build_metadata(self) -> Optional[Dict[str, str]]:
+        """
+        Practicus/Vodafone gateway wants:
+          metadata: { "username": "...", "pwd": "..." }
+        Only include if both provided.
+        """
+        u = (self.md_username or "").strip()
+        p = (self.md_password or "").strip()
+        if not u or not p:
+            return None
+        return {"username": u, "pwd": p}
 
     def _call_openai_compatible(self, prompt: str, max_output_tokens: int) -> str:
         if not self.base_url:
@@ -245,6 +285,9 @@ class LLMClient:
             raise RuntimeError("LLM_MODEL is required when LLM_MODE=openai")
 
         url = self._resolve_openai_url()
+        if not url:
+            raise RuntimeError("Failed to resolve OpenAI-compatible URL from LLM_BASE_URL")
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -265,7 +308,18 @@ class LLMClient:
         # Token field differs across gateways; default "max_tokens"
         payload[self.openai_token_field] = int(max_output_tokens)
 
-        r = requests.post(url, json=payload, headers=headers, timeout=self.timeout_sec)
+        # ✅ Practicus/Vodafone metadata auth (optional)
+        md = self._build_metadata()
+        if md:
+            payload["metadata"] = md
+
+        r = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=self.timeout_sec,
+            verify=self.verify_ssl,
+        )
         if not r.ok:
             raise RuntimeError(f"OpenAI-compatible HTTP {r.status_code}: {r.text[:500]}")
 
