@@ -3,9 +3,11 @@ import base64
 import streamlit as st
 from pathlib import Path
 from src.core import service
+from dotenv import load_dotenv
 
-SHOW_DEBUG = os.getenv("SHOW_DEBUG", "0") == "1"
+load_dotenv()
 
+SHOW_DEBUG = os.getenv("SHOW_DEBUG", "1") == "1"
 
 # MUST be first Streamlit call
 st.set_page_config(

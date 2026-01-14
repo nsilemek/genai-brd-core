@@ -7,7 +7,7 @@ Rules:
 - Avoid speculation
 
 Existing fields context:
-{{fields_context}}
+{fields_context}
 
 Slide text:
-{{pdf_text}}
+{pdf_text}
