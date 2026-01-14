@@ -16,6 +16,10 @@ from .brd_generator import BRDGenerator
 from ..export.exporter_docx import export_docx_file
 from ..export.exporter_txt import export_txt_file
 
+# (Eski RAG importları durabilir; add_wiki_documents artık bunları kullanmıyor)
+# from ..rag.confluence import fetch_confluence_pages
+# from ..rag.ingest import build_or_update_index
+
 ensure_data_dirs()
 
 # NOTE:
@@ -55,6 +59,95 @@ def message(
 
 
 # -----------------------------
+# Wiki -> RAG (Confluence)
+# -----------------------------
+def add_wiki_documents(
+    session_id: str,
+    wiki_type: str,
+    base_url: str,
+    username: str,
+    api_token: str,
+    space_key: str | None = None,
+    limit: int = 50,
+    page_ids: list[str] | None = None,
+    data_dir: str = "data/sessions",
+    index_dir: str = "data/indexes",
+) -> Dict[str, Any]:
+    """
+    Pull wiki documents (Confluence) and build a session-scoped RAG index.
+
+    HARD RULES:
+    - must be optional
+    - must never crash wizard (demo-safe)
+    - must work only by setting state.rag_index_id
+
+    Returns:
+      {
+        "session_id": ...,
+        "index_id": ...,
+        "documents_count": int,
+        "chunks_count": int,
+        "errors": list[str]
+      }
+    """
+    state = load_session(session_id, data_dir=data_dir)
+
+    # Demo-safe: everything inside try/except
+    try:
+        # Use new pipeline
+        from ..rag.index import get_default_vector_store
+        from ..rag.wiki_ingest import ingest_wiki_from_config_report
+
+        # Ensure vector store uses configured dirs
+        os.environ.setdefault("VRAI_RAG_BASE_DIR", index_dir)
+
+        vector_store = get_default_vector_store()
+
+        report = ingest_wiki_from_config_report(
+            wiki_type=wiki_type,
+            vector_store=vector_store,
+            page_ids=page_ids,
+            space_key=space_key,
+            limit=limit,
+            index_id=getattr(state, "rag_index_id", None),  # varsa update edebilir
+            base_url=base_url,
+            username=username,
+            api_token=api_token,
+        )
+
+        index_id = report.get("index_id")
+
+        # Save pointer to session ONLY if we have an index_id
+        if index_id:
+            # state model strict olsa bile demo-safe şekilde yaz
+            try:
+                setattr(state, "rag_index_id", index_id)
+            except Exception:
+                # strict dataclass ise buraya düşebilir; yine de wizard kırmayalım
+                pass
+
+            save_session(state, data_dir=data_dir)
+
+        return {
+            "session_id": session_id,
+            "index_id": index_id,
+            "documents_count": int(report.get("documents_count", 0) or 0),
+            "chunks_count": int(report.get("chunks_count", 0) or 0),
+            "errors": report.get("errors", []) or [],
+        }
+
+    except Exception as e:
+        # Absolute demo-safe fallback
+        return {
+            "session_id": session_id,
+            "index_id": getattr(state, "rag_index_id", None),
+            "documents_count": 0,
+            "chunks_count": 0,
+            "errors": [f"add_wiki_documents failed (demo-safe): {e}"],
+        }
+
+
+# -----------------------------
 # PDF Upload
 # -----------------------------
 def upload_pdf(
@@ -64,26 +157,12 @@ def upload_pdf(
     data_dir: str = "data/sessions",
     upload_dir: str = "data/uploads",
 ) -> Dict[str, Any]:
-    """
-    UI uploads PDF here (slides).
-
-    Behavior:
-      - Save file to data/uploads/<session_id>_<filename>
-      - Extract text (lightweight; uses pypdf if available, else stub message)
-      - Call flow.on_pdf_text_extracted(session_id, extracted_text, file_name, stored_path)
-        so flow can:
-          - summarize -> Background
-          - mark intake_done
-          - continue normal BRD flow
-    """
     os.makedirs(upload_dir, exist_ok=True)
 
     safe_name = re.sub(r"[^a-zA-Z0-9._-]+", "_", filename).strip("_") or "slides.pdf"
     path = Path(upload_dir) / f"{session_id}_{safe_name}"
     path.write_bytes(file_bytes)
 
-    # (Opsiyonel) state'e yalnızca convenience pointer yazalım (çift attach yapmayalım!)
-    # attach_uploaded_file(...) zaten flow.handle_pdf_text içinde yapılıyor.
     try:
         state = load_session(session_id, data_dir=data_dir)
         setattr(state, "pdf_uploaded_path", str(path))
@@ -93,7 +172,6 @@ def upload_pdf(
 
     extracted_text = _extract_text_from_pdf_stub(str(path))
 
-    # 🔑 flow tarafına dosya adı + path gönderiyoruz (Background'a ekler, intake_done yapar)
     return on_pdf_text_extracted(
         session_id=session_id,
         pdf_text=extracted_text,
@@ -104,19 +182,12 @@ def upload_pdf(
 
 
 def _extract_text_from_pdf_stub(pdf_path: str, max_chars: int = 6000) -> str:
-    """
-    Very light demo-safe PDF extraction.
-
-    - If pypdf is installed, extracts text from first N pages.
-    - Otherwise returns a stub text so demo doesn't break.
-    """
-    # ---- Optional lightweight extraction (ONLY if pypdf installed) ----
     try:
         from pypdf import PdfReader  # type: ignore
 
         reader = PdfReader(pdf_path)
         chunks = []
-        for page in reader.pages[:12]:  # limit pages for safety
+        for page in reader.pages[:12]:
             txt = page.extract_text() or ""
             if txt.strip():
                 chunks.append(txt.strip())
@@ -126,7 +197,6 @@ def _extract_text_from_pdf_stub(pdf_path: str, max_chars: int = 6000) -> str:
     except Exception:
         pass
 
-    # fallback: still demo works, just less smart
     name = os.path.basename(pdf_path)
     return (
         f"PDF uploaded: {name}\n"

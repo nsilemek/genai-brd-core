@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Optional
 
+from ..rag.retriever import retrieve_snippets_for_flow
+
+
 from ..llm.client import LLMClient
 from ..llm.context_builder import build_fields_context, build_rag_snippets, field_desc
 from .config import USE_LLM  # single source of truth
@@ -191,6 +194,8 @@ def _build_bot_payload(
         "pdf_summary": getattr(state, "pdf_summary", ""),
         "pdf_applied_to_background": getattr(state, "pdf_applied_to_background", False),
         "privacy_ruleset_output": getattr(state, "privacy_ruleset_output", None),
+        # RAG debug (opsiyonel, UI göstermese de payload'da dursun)
+        "rag_index_id": getattr(state, "rag_index_id", None),
     }
 
 
@@ -300,13 +305,25 @@ def handle_user_message(
     if question_id:
         set_answer(state, question_id, user_text)
 
-    # 2) normalize answer
-    norm = normalize_answer(current_field, user_text, state.fields, rag_snippets=[])
+    # ✅ 2) RAG: normalize_answer çağırmadan hemen önce
+    rag_snips = []
+    if getattr(state, "rag_index_id", None):
+        # query: field + user text (basit ama işe yarar)
+        q = f"{current_field}: {user_text}"
+        try:
+            rag_snips = retrieve_snippets(index_id=state.rag_index_id, query=q, top_k=4)
+        except Exception as e:
+            # RAG asla wizard'ı kırmamalı
+            print("RAG error:", e)
+            rag_snips = []
+
+    # 3) normalize answer
+    norm = normalize_answer(current_field, user_text, state.fields, rag_snippets=rag_snips)
 
     needs = bool(norm.get("needs_clarification", False))
     followup = norm.get("followup_question")
 
-    # 2b) clarification
+    # 3b) clarification
     if needs and followup:
         state.current_field = current_field
         state.last_question_ids = [question_id] if question_id else []
@@ -323,7 +340,7 @@ def handle_user_message(
     value = str(norm.get("value", "")).strip()
     confidence = float(norm.get("confidence", 0.7))
 
-    # 3) update canonical field
+    # 4) update canonical field
     update_field(
         state,
         field_name=current_field,
@@ -333,18 +350,18 @@ def handle_user_message(
         evidence=f"User answer to {question_id}" if question_id else "User answer",
     )
 
-    # 4) scoring
+    # 5) scoring
     score_result = compute_scores_from_fields(state.fields)
     weak = get_weak_fields(score_result)
 
-    # 5) next field
+    # 6) next field
     next_field = pick_next_field(score_result, state.fields, weak_fields=weak)
 
-    # 6) next questions
+    # 7) next questions
     qids = question_ids_for_field(score_result, next_field) if next_field else []
     q_texts = resolve_questions(qids)[:2] if qids else []
 
-    # 7) persist
+    # 8) persist
     state.current_field = next_field
     state.last_question_ids = qids[:2]
     state.scores = {
