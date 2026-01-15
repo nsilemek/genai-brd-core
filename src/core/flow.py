@@ -312,10 +312,11 @@ def handle_user_message(
 
     # ✅ 2) RAG: normalize_answer çağırmadan hemen önce
     rag_snips = []
-    if getattr(state, "rag_index_id", None):
+    rag_index_id = getattr(state, "rag_index_id", None)
+    if rag_index_id is not None:    
         q = f"{current_field}: {user_text}"
         try:
-            rag_snips = retrieve_snippets_for_flow(index_id=state.rag_index_id, query=q, top_k=4)
+            rag_snips = retrieve_snippets_for_flow(index_id=rag_index_id, query=q, top_k=4)
         except Exception as e:
             # RAG asla wizard'ı kırmamalı
             print("RAG error:", e)
@@ -323,6 +324,12 @@ def handle_user_message(
 
     # 3) normalize answer
     norm = normalize_answer(current_field, user_text, state.fields, rag_snippets=rag_snips)
+
+    print("CURRENT_FIELD:", current_field)
+    print("USER_TEXT:", repr(user_text))
+    print("NORM_RAW:", norm)              # dict'i komple gör
+    print("NORM_VALUE:", repr(norm.get("value")))
+    print("NORM_CONF:", norm.get("confidence"))
 
     needs = bool(norm.get("needs_clarification", False))
     followup = norm.get("followup_question")
@@ -354,12 +361,17 @@ def handle_user_message(
         evidence=f"User answer to {question_id}" if question_id else "User answer",
     )
 
+    print("FIELDS_KEYS:", list(state.fields.keys()))
+    print("STATE_FIELD:", state.fields.get(current_field))
+
     # 5) scoring
     score_result = compute_scores_from_fields(state.fields)
     weak = get_weak_fields(score_result)
 
     # 6) next field
     next_field = pick_next_field(score_result, state.fields, weak_fields=weak)
+
+    print("NEXT_FIELD:", next_field)
 
     # 7) next questions
     qids = question_ids_for_field(score_result, next_field) if next_field else []

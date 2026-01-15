@@ -167,13 +167,32 @@ def score_impacted_channels(val: str) -> Tuple[int, List[str], List[str]]:
         return 5, ["Kanal detayları zayıf."], ["Q_CHANNELS_IMPACT_EXPLAIN"]
     return 10, [], []
 
+# def score_impacted_journey(val: str) -> Tuple[int, List[str], List[str]]:
+#     print("Impacted Journey value for scoring:", val)
+#     if char_len(val) == 0:
+#         return 0, ["Impacted Journey boş."], ["Q_JOURNEY_EMPTY"]
+#     low = val.lower()
+#     print("Impacted Journey value for scoring lower:", low)
+#     if any(x in low for x in ["yeni", "new", "mevcut", "existing"]):
+#         return 5, [], []
+#     return 3, ["Journey tipi net değil."], ["Q_JOURNEY_NEW_EXISTING"]
+
 def score_impacted_journey(val: str) -> Tuple[int, List[str], List[str]]:
     if char_len(val) == 0:
         return 0, ["Impacted Journey boş."], ["Q_JOURNEY_EMPTY"]
+ 
     low = val.lower()
+ 
+    # journey tipi (mevcut/yeni) varsa tam puan
     if any(x in low for x in ["yeni", "new", "mevcut", "existing"]):
         return 5, [], []
-    return 3, ["Journey tipi net değil."], ["Q_JOURNEY_NEW_EXISTING"]
+ 
+    # journey adı var ama tipi yoksa: yine iyi, ama küçük eksik
+    # (journey adı gibi duruyor mu?) -> en az 2 kelime vs.
+    if len(_s(val).split()) >= 2:
+        return 4, ["Journey tipi (mevcut/yeni) belirtilmemiş."], ["Q_JOURNEY_NEW_EXISTING"]
+ 
+    return 3, ["Journey tanımı çok kısa/genel."], ["Q_JOURNEY_NEW_EXISTING"]
 
 def score_journeys_description(val: str) -> Tuple[int, List[str], List[str]]:
     if char_len(val) == 0:

@@ -91,7 +91,7 @@ def add_wiki_documents(
       }
     """
     state = load_session(session_id, data_dir=data_dir)
-
+    print(f"Adding wiki documents for session {session_id} using Confluence at {base_url}")
     # Demo-safe: everything inside try/except
     try:
         # Use new pipeline

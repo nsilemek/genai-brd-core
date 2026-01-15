@@ -226,6 +226,7 @@ class LLMClient:
         except Exception:
             return r.text
 
+        print("Custom LLM response data:", data)
         # Common shapes
         if isinstance(data, dict):
             if isinstance(data.get("text"), str):
@@ -313,6 +314,8 @@ class LLMClient:
         if md:
             payload["metadata"] = md
 
+        #print("AI request payload:", payload)
+
         r = requests.post(
             url,
             json=payload,
@@ -320,11 +323,13 @@ class LLMClient:
             timeout=self.timeout_sec,
             verify=self.verify_ssl,
         )
+
         if not r.ok:
             raise RuntimeError(f"OpenAI-compatible HTTP {r.status_code}: {r.text[:500]}")
 
         try:
             data = r.json()
+            #print("AI response data:", data)
         except Exception:
             return r.text
 

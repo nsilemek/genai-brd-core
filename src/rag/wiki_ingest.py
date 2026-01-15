@@ -96,6 +96,7 @@ def ingest_wiki_pages_report(
             for pid in page_ids:
                 try:
                     p = wiki_client.fetch_page(pid)
+                    print(f"Fetched page ID {pid}: {p.get('title', 'No Title')}")
                     if p:
                         pages.append(p)
                 except Exception as e:

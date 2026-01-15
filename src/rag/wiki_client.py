@@ -62,9 +62,19 @@ class ConfluenceClient(WikiClient):
                 "Confluence API token or password required (env: CONFLUENCE_API_TOKEN or CONFLUENCE_PASSWORD)"
             )
 
-        self.auth = (self.username, self.api_token or self.password)
+        # Ensure both username and password/token are not None
+        if self.api_token:
+            auth_password = self.api_token
+        elif self.password:
+            auth_password = self.password
+        else:
+            raise ValueError("Confluence API token or password required (env: CONFLUENCE_API_TOKEN or CONFLUENCE_PASSWORD)")
+
+        self.auth = (self.username, auth_password)
         self.session = requests.Session()
         self.session.auth = self.auth
+
+        print(f"ConfluenceClient initialized for {self.base_url} as {self.api_token}")
 
     def fetch_page(self, page_id: str) -> Dict[str, Any]:
         """Fetch a single Confluence page by ID"""
