@@ -114,20 +114,6 @@ def contains_any(text: str, words: List[str]) -> bool:
     t = _s(text).lower()
     return any(w.lower() in t for w in words)
 
-def _looks_like_yes(text: str) -> bool:
-    """
-    Very small heuristic: if user indicates personal data exists / privacy scope yes.
-    """
-    low = _s(text).lower()
-    yes_markers = [
-        "evet", "var", "yes", "pii", "kişisel veri", "personal data", "kvkk kapsamında", "gdpr",
-        "telefon", "email", "e-posta", "tc", "kimlik", "adres", "msisdn"
-    ]
-    no_markers = ["hayır", "yok", "no", "none", "içermiyor", "not in scope"]
-    if any(n in low for n in no_markers):
-        return False
-    return any(y in low for y in yes_markers)
-
 # -------------------------------------------------
 # 5) Field scorers (BRD 100)
 # -------------------------------------------------
@@ -321,21 +307,26 @@ def get_weak_fields(result: ScoreResult, ratio: float = 0.7) -> List[str]:
 def resolve_questions(qids: List[str]) -> List[str]:
     return [QUESTIONS_TR.get(q, q) for q in qids]
 
-
 def _looks_like_yes(text: str) -> bool:
+    """
+    Heuristic: returns True if user indicates personal data exists / privacy scope yes.
+    """
     low = _s(text).lower()
-
-    no_markers = ["hayır", "hayir", "yok", "no", "none", "içermiyor", "icermiyor", "not in scope"]
+    no_markers = [
+        "hayır", "hayir", "yok", "no", "none", "içermiyor", "icermiyor", "not in scope"
+    ]
+    yes_markers = [
+        "evet", "var", "yes", "in scope", "kapsamında", "kapsaminda",
+        "pii", "kişisel veri", "kisisel veri", "personal data", "kvkk", "kvkk kapsamında", "gdpr",
+        "telefon", "email", "e-posta", "tc", "kimlik", "adres", "msisdn"
+    ]
+    # If any negative marker is present, return False
     if any(n in low for n in no_markers):
         return False
-
+    # Only return True if a strong yes marker is present (not just PII terms)
     strong_yes = ["evet", "var", "yes", "in scope", "kapsamında", "kapsaminda"]
-    pii_terms = ["pii", "kişisel veri", "kisisel veri", "personal data", "kvkk", "gdpr", "msisdn", "telefon", "email", "e-posta", "tc", "kimlik", "adres"]
-
-    # güçlü yes varsa True
     if any(y in low for y in strong_yes):
         return True
-
-    # sadece PII term geçti diye True deme; kullanıcı net "var" demediyse false
+    # Optionally, you can decide if PII terms alone should trigger True
+    # For now, only strong yes triggers True
     return False
-

@@ -45,9 +45,10 @@ class VectorStore:
 
     def __init__(
         self,
-        base_dir: str = "data/indexes",
+        base_dir: str = f"data/indexes",
         embedding_model: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
     ):
+        print(f"[RAG] Initializing VectorStore with base_dir='{base_dir}' and embedding_model='{embedding_model}'")
         self.base_dir = base_dir
         os.makedirs(base_dir, exist_ok=True)
 
@@ -221,6 +222,10 @@ class VectorStore:
         Add texts to vector store with embeddings.
         - embedding backend yoksa NotImplementedError (ingest/service yakalamalı)
         """
+        print("=== [RAG] add_texts ENTERED ===", flush=True)
+        print("Texts:", len(texts), flush=True)
+        print("Client exists:", bool(self.client), flush=True)
+
         if not texts:
             return
 
@@ -237,6 +242,8 @@ class VectorStore:
                 metadata={"index_id": index.index_id},
             )
 
+        print("[RAG] Writing to collection 1:", collection_name, flush=True)
+
         # Prepare metadatas
         if metadatas is None:
             metadatas = [{} for _ in texts]
@@ -247,15 +254,28 @@ class VectorStore:
             else:
                 metadatas = metadatas[: len(texts)]
 
-        embeddings = self._embed(texts)
+        import numpy as np
+                
+        embeddings = np.array(self._embed(texts), dtype=np.float32)
         ids = [self._make_id(index.index_id, t, i) for i, t in enumerate(texts)]
+
+        # convert metadatas from List[dict[Unknown, Unknown]] to dict[uknown, unknown]
+        sanitized_metadatas = []
+        for md in metadatas:
+            sanitized_md = {}
+            for k, v in md.items():
+                if isinstance(k, str):
+                    sanitized_md[k] = v
+            sanitized_metadatas.append(sanitized_md)
 
         collection.add(
             embeddings=embeddings,
             documents=texts,
-            metadatas=metadatas,
+            metadatas=sanitized_metadatas,
             ids=ids,
         )
+
+        print("[RAG] Writing to collection 2:", collection_name, flush=True)
 
     # -------------------------
     # Query
@@ -270,6 +290,9 @@ class VectorStore:
         Query the vector store and return list of hits.
         Demo-safe: embedding/chroma yoksa []
         """
+        print("[RAG] About to query vector store", flush=True)
+        print("Query text:", query_text, flush=True)
+        
         if not query_text:
             return []
 

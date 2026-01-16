@@ -34,6 +34,9 @@ ensure_data_dirs()
 # -----------------------------
 def create_session(data_dir: str = "data/sessions") -> Dict[str, Any]:
     state = _create_session(data_dir=data_dir)
+ 
+    _auto_ingest_confluence_if_configured(state.session_id, data_dir=data_dir)
+ 
     payload = start_or_resume(state.session_id, data_dir=data_dir)
     return payload
 
@@ -57,6 +60,32 @@ def message(
         data_dir=data_dir,
     )
 
+def _auto_ingest_confluence_if_configured(session_id: str, data_dir: str = "data/sessions"):
+    base_url = os.getenv("CONFLUENCE_BASE_URL", "").strip()
+    username = os.getenv("CONFLUENCE_USERNAME", "").strip()
+    token = os.getenv("CONFLUENCE_API_TOKEN", "").strip()
+    space = os.getenv("CONFLUENCE_SPACE_KEY", "").strip()
+    limit = int(os.getenv("CONFLUENCE_LIMIT", "50") or 50)
+    page_ids_str = os.getenv("CONFLUENCE_PAGE_IDS", "").strip()
+    #split string with comma to list from config
+    page_ids = [pid.strip() for pid in page_ids_str.split(",")] if page_ids_str else None
+
+    if not (base_url and username and token and space):
+        print("[RAG] Confluence env missing -> auto-ingest skipped", flush=True)
+        return
+ 
+    print("[RAG] Auto-ingest starting...", flush=True)
+    rep = add_wiki_documents(
+        session_id=session_id,
+        wiki_type="confluence",
+        base_url=base_url,
+        username=username,
+        api_token=token,
+        space_key=space,
+        limit=limit,
+        page_ids=page_ids
+    )
+    print("[RAG] Auto-ingest report:", rep, flush=True)
 
 # -----------------------------
 # Wiki -> RAG (Confluence)
@@ -90,6 +119,12 @@ def add_wiki_documents(
         "errors": list[str]
       }
     """
+    print("=== [RAG] add_wiki_documents CALLED ===", flush=True)
+    print("wiki_type:", wiki_type, flush=True)
+    print("base_url:", base_url, flush=True)
+    print("space_key:", space_key, flush=True)
+    print("page_ids:", page_ids, flush=True)
+
     state = load_session(session_id, data_dir=data_dir)
     print(f"Adding wiki documents for session {session_id} using Confluence at {base_url}")
     # Demo-safe: everything inside try/except

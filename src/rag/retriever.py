@@ -67,6 +67,9 @@ def retrieve_snippets_for_flow(
         return []
     
     print("RAG query:", q)
+    print("=== [RAG] retrieve_snippets_for_flow CALLED ===", flush=True)
+    print("index_id:", index_id, flush=True)
+    print("query:", query, flush=True)
 
     # field_name ayıkla (opsiyonel, query zenginleştirme için)
     field_name = "generic"

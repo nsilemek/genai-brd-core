@@ -43,6 +43,7 @@ def ingest_wiki_pages(
     Backward-compatible: returns only index_id.
     Demo-safe: no exception should escape.
     """
+    print("Starting wiki ingestion...")
     report = ingest_wiki_pages_report(
         wiki_client=wiki_client,
         vector_store=vector_store,
@@ -52,6 +53,9 @@ def ingest_wiki_pages(
         max_chunk_chars=max_chunk_chars,
         index_id=index_id,
     )
+    print("RAG REPORT:", report)
+    print("CHROMA CLIENT OK:", vector_store.client is not None)
+    print("BASE_DIR:", vector_store.base_dir)
     return report["index_id"]
 
 
@@ -77,6 +81,7 @@ def ingest_wiki_pages_report(
     - Never raises
     - Always returns index_id
     """
+
     errors: List[str] = []
 
     if not index_id:
@@ -110,6 +115,9 @@ def ingest_wiki_pages_report(
     # Extract + chunk
     all_chunks: List[str] = []
     all_metadatas: List[dict] = []
+
+    print(f"[RAG] Pages fetched: {len(pages)}", flush=True)
+    print(f"[RAG] Total chunks prepared: {len(all_chunks)}", flush=True)
 
     for page in pages:
         try:

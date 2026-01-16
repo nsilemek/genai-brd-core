@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from email.policy import default
 import os
 import re
 from html import unescape
@@ -53,6 +54,8 @@ class ConfluenceClient(WikiClient):
         self.username = username or os.getenv("CONFLUENCE_USERNAME")
         self.api_token = api_token or os.getenv("CONFLUENCE_API_TOKEN")
         self.password = password or os.getenv("CONFLUENCE_PASSWORD")
+        # SSL verify (enterprise cert/proxy)
+        self.verify_ssl = _env_bool("CONFLUENCE_VERIFY_SSL", "1")
         self.timeout_sec = int(timeout_sec)
 
         if not self.username:
@@ -78,9 +81,14 @@ class ConfluenceClient(WikiClient):
 
     def fetch_page(self, page_id: str) -> Dict[str, Any]:
         """Fetch a single Confluence page by ID"""
+        print(f"Fetching Confluence page ID: {page_id}")
         url = f"{self.base_url}/rest/api/content/{page_id}"
-        params = {"expand": "body.storage,version,space,_links"}
-        r = self.session.get(url, params=params, timeout=self.timeout_sec)
+        #params = {"expand": "body.storage,version,space,_links"}
+        r = self.session.get(
+            url, params=None, 
+            timeout=self.timeout_sec, 
+            verify=self.verify_ssl
+        )
         r.raise_for_status()
         return r.json()
 
@@ -159,3 +167,6 @@ def create_wiki_client(**kwargs) -> ConfluenceClient:
     allowed = {"base_url", "username", "api_token", "password", "timeout_sec"}
     filtered = {k: v for k, v in kwargs.items() if k in allowed}
     return ConfluenceClient(**filtered)
+
+def _env_bool(key: str, default: str = "0") -> bool:
+    return os.getenv(key, default).strip() in ("1", "true", "True", "yes", "YES")
