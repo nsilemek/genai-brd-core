@@ -54,43 +54,54 @@ class ConfluenceClient(WikiClient):
         self.username = username or os.getenv("CONFLUENCE_USERNAME")
         self.api_token = api_token or os.getenv("CONFLUENCE_API_TOKEN")
         self.password = password or os.getenv("CONFLUENCE_PASSWORD")
+       
         # SSL verify (enterprise cert/proxy)
         self.verify_ssl = _env_bool("CONFLUENCE_VERIFY_SSL", "1")
         self.timeout_sec = int(timeout_sec)
 
-        if not self.username:
+        #show error if token is not empty and username and password are empty
+        if(self.api_token == None) and (self.username == None):
             raise ValueError("Confluence username required (env: CONFLUENCE_USERNAME)")
-        if not (self.api_token or self.password):
-            raise ValueError(
-                "Confluence API token or password required (env: CONFLUENCE_API_TOKEN or CONFLUENCE_PASSWORD)"
-            )
+        if(self.api_token == None) and (self.password == None):
+            raise ValueError("Confluence password required (env: CONFLUENCE_PASSWORD)")
+        if(self.api_token == None):
+            raise ValueError("Confluence token is required (env: CONFLUENCE_API_TOKEN)")
 
         # Ensure both username and password/token are not None
-        if self.api_token:
-            auth_password = self.api_token
+        if self.username:
+            auth_password = self.password
         elif self.password:
             auth_password = self.password
         else:
             raise ValueError("Confluence API token or password required (env: CONFLUENCE_API_TOKEN or CONFLUENCE_PASSWORD)")
 
         self.auth = (self.username, auth_password)
-        self.session = requests.Session()
-        self.session.auth = self.auth
-
-        print(f"ConfluenceClient initialized for {self.base_url} as {self.api_token}")
+        self.session = requests
 
     def fetch_page(self, page_id: str) -> Dict[str, Any]:
         """Fetch a single Confluence page by ID"""
-        print(f"Fetching Confluence page ID: {page_id}")
         url = f"{self.base_url}/rest/api/content/{page_id}"
-        #params = {"expand": "body.storage,version,space,_links"}
+        params = {"expand": "body.storage,version,space,_links"}
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json",
+        }
         r = self.session.get(
-            url, params=None, 
+            url=url, 
+            params=params, 
+            headers=headers,
             timeout=self.timeout_sec, 
             verify=self.verify_ssl
         )
-        r.raise_for_status()
-        return r.json()
+        if not r.ok:
+            raise RuntimeError(f"[WikiClient] HTTP {r.status_code}: {r.text[:500]}")
+
+        try:
+            data = r.json()
+            return data
+        except Exception as e:
+            print(f"[WikiClient] Failed to parse JSON response: {e}")
+            return {}
 
     def fetch_pages(
         self,

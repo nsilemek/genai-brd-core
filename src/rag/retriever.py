@@ -66,10 +66,10 @@ def retrieve_snippets_for_flow(
     if not q:
         return []
     
-    print("RAG query:", q)
-    print("=== [RAG] retrieve_snippets_for_flow CALLED ===", flush=True)
-    print("index_id:", index_id, flush=True)
-    print("query:", query, flush=True)
+    print("[RAG] RAG query:", q)
+    print("[RAG] retrieve_snippets_for_flow CALLED ===", flush=True)
+    print("[RAG] index_id:", index_id, flush=True)
+    print("[RAG] query:", query, flush=True)
 
     # field_name ayıkla (opsiyonel, query zenginleştirme için)
     field_name = "generic"
@@ -78,7 +78,7 @@ def retrieve_snippets_for_flow(
         if left:
             field_name = left
 
-    print(f"RAG retrieve for field: {field_name}")
+    print(f"[RAG] retrieve for field: {field_name}")
     # vector_store sağlanmadıysa default üret
     if vector_store is None:
         try:
@@ -91,13 +91,13 @@ def retrieve_snippets_for_flow(
     mapped = FIELD_TO_QUERY.get(field_name, field_name)
     query_text = f"{mapped} | {q}" if mapped and mapped not in q else q
 
-    print(f"RAG query_text: {query_text}")
+    print(f"[RAG] query_text: {query_text}")
 
     try:
         index = RAGIndex(index_id=index_id, meta={})
-        print(f"RAG retrieving from index: {index_id}")
+        print(f"[RAG] retrieving from index: {index_id}")
         hits = vector_store.query(index, query_text=query_text, top_k=top_k)
-        print(f"RAG hits found: {len(hits)}")
+        print(f"[RAG] hits found: {len(hits)}")
     except NotImplementedError:
         return []
     except Exception:
@@ -110,6 +110,6 @@ def retrieve_snippets_for_flow(
             continue
         snippets.append(t[:max_chars_each])
     
-    print(f"RAG snippets retrieved: {len(snippets)}")
+    print(f"[RAG] snippets retrieved: {len(snippets)}")
 
     return snippets

@@ -71,10 +71,10 @@ def _auto_ingest_confluence_if_configured(session_id: str, data_dir: str = "data
     page_ids = [pid.strip() for pid in page_ids_str.split(",")] if page_ids_str else None
 
     if not (base_url and username and token and space):
-        print("[RAG] Confluence env missing -> auto-ingest skipped", flush=True)
+        print("[Service] Confluence env missing -> auto-ingest skipped", flush=True)
         return
  
-    print("[RAG] Auto-ingest starting...", flush=True)
+    print("[Service] Auto-ingest starting...", flush=True)
     rep = add_wiki_documents(
         session_id=session_id,
         wiki_type="confluence",
@@ -85,7 +85,7 @@ def _auto_ingest_confluence_if_configured(session_id: str, data_dir: str = "data
         limit=limit,
         page_ids=page_ids
     )
-    print("[RAG] Auto-ingest report:", rep, flush=True)
+    print("[Service] Auto-ingest report:", rep, flush=True)
 
 # -----------------------------
 # Wiki -> RAG (Confluence)
@@ -102,6 +102,7 @@ def add_wiki_documents(
     data_dir: str = "data/sessions",
     index_dir: str = "data/indexes",
 ) -> Dict[str, Any]:
+    print(f"[Service] add_wiki_documents CALLED for session {session_id} and wiki_type {wiki_type}")
     """
     Pull wiki documents (Confluence) and build a session-scoped RAG index.
 
@@ -119,14 +120,8 @@ def add_wiki_documents(
         "errors": list[str]
       }
     """
-    print("=== [RAG] add_wiki_documents CALLED ===", flush=True)
-    print("wiki_type:", wiki_type, flush=True)
-    print("base_url:", base_url, flush=True)
-    print("space_key:", space_key, flush=True)
-    print("page_ids:", page_ids, flush=True)
-
     state = load_session(session_id, data_dir=data_dir)
-    print(f"Adding wiki documents for session {session_id} using Confluence at {base_url}")
+    print(f"[Service] Adding wiki documents for session {session_id} using Confluence at {base_url}")
     # Demo-safe: everything inside try/except
     try:
         # Use new pipeline
@@ -137,7 +132,7 @@ def add_wiki_documents(
         os.environ.setdefault("VRAI_RAG_BASE_DIR", index_dir)
 
         vector_store = get_default_vector_store()
-
+        print(f"[Service] Vector store initialized: {vector_store}")
         report = ingest_wiki_from_config_report(
             wiki_type=wiki_type,
             vector_store=vector_store,
@@ -149,6 +144,7 @@ def add_wiki_documents(
             username=username,
             api_token=api_token,
         )
+        print(f"[Service] Ingest wiki report: {report}")
 
         index_id = report.get("index_id")
 

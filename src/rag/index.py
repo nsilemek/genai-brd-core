@@ -222,9 +222,8 @@ class VectorStore:
         Add texts to vector store with embeddings.
         - embedding backend yoksa NotImplementedError (ingest/service yakalamalı)
         """
-        print("=== [RAG] add_texts ENTERED ===", flush=True)
-        print("Texts:", len(texts), flush=True)
-        print("Client exists:", bool(self.client), flush=True)
+        print("[RAG] Texts:", len(texts), flush=True)
+        print("[RAG] Client exists:", bool(self.client), flush=True)
 
         if not texts:
             return
@@ -291,7 +290,7 @@ class VectorStore:
         Demo-safe: embedding/chroma yoksa []
         """
         print("[RAG] About to query vector store", flush=True)
-        print("Query text:", query_text, flush=True)
+        print("[RAG] Query text:", query_text, flush=True)
         
         if not query_text:
             return []

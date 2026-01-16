@@ -226,7 +226,7 @@ class LLMClient:
         except Exception:
             return r.text
 
-        print("Custom LLM response data:", data)
+        #print("Custom LLM response data:", data)
         # Common shapes
         if isinstance(data, dict):
             if isinstance(data.get("text"), str):

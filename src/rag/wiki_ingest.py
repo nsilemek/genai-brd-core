@@ -43,7 +43,7 @@ def ingest_wiki_pages(
     Backward-compatible: returns only index_id.
     Demo-safe: no exception should escape.
     """
-    print("Starting wiki ingestion...")
+    print("[WikiIngest] Starting wiki ingestion...")
     report = ingest_wiki_pages_report(
         wiki_client=wiki_client,
         vector_store=vector_store,
@@ -53,9 +53,9 @@ def ingest_wiki_pages(
         max_chunk_chars=max_chunk_chars,
         index_id=index_id,
     )
-    print("RAG REPORT:", report)
-    print("CHROMA CLIENT OK:", vector_store.client is not None)
-    print("BASE_DIR:", vector_store.base_dir)
+    print("[WikiIngest] RAG REPORT:", report)
+    print("[WikiIngest] CHROMA CLIENT OK:", vector_store.client is not None)
+    print("[WikiIngest] BASE_DIR:", vector_store.base_dir)
     return report["index_id"]
 
 
@@ -94,6 +94,7 @@ def ingest_wiki_pages_report(
         errors.append(f"create_index failed: {e}")
         index = RAGIndex(index_id=index_id, meta={"collection_name": f"rag_index_{index_id}"})
 
+    print(f"[WikiIngest] Using index ID: {index_id}")
     # Fetch pages
     pages: List[Dict[str, Any]] = []
     try:
@@ -116,8 +117,8 @@ def ingest_wiki_pages_report(
     all_chunks: List[str] = []
     all_metadatas: List[dict] = []
 
-    print(f"[RAG] Pages fetched: {len(pages)}", flush=True)
-    print(f"[RAG] Total chunks prepared: {len(all_chunks)}", flush=True)
+    print(f"[WikiIngest] Pages fetched: {len(pages)}", flush=True)
+    print(f"[WikiIngest] Total chunks prepared: {len(all_chunks)}", flush=True)
 
     for page in pages:
         try:
@@ -208,7 +209,7 @@ def ingest_wiki_from_config_report(
     Demo-safe: never raises, always returns index_id
     """
     errors: List[str] = []
-
+    print(f"[WikiIngest] ingest_wiki_from_config_report called with index_id: {index_id}")
     if not index_id:
         index_id = str(uuid.uuid4())
 
@@ -217,14 +218,16 @@ def ingest_wiki_from_config_report(
             raise ValueError(f"Only Confluence is supported. Got: {wiki_type}")
 
         wiki_client = create_wiki_client(**wiki_kwargs)
+        print(f"[WikiIngest] Wiki client created")
         rep = ingest_wiki_pages_report(
             wiki_client=wiki_client,
             vector_store=vector_store,
             page_ids=page_ids,
             space_key=space_key,
             limit=limit,
-            index_id=index_id,
+            index_id=index_id
         )
+        print(f"[WikiIngest] Ingest wiki report: {rep}")
         return rep
     except Exception as e:
         errors.append(f"ingest_wiki_from_config failed: {e}")

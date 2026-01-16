@@ -217,7 +217,7 @@ def ingest_file(
         chunks = chunk_text(text, max_chars=max_chunk_chars)
         index = vector_store.create_index(index_id)
 
-        print(f"Ingesting file '{file_path}' into index '{index_id}' with {len(chunks)} chunks.")
+        print(f"[Ingest] Ingesting file '{file_path}' into index '{index_id}' with {len(chunks)} chunks.")
 
         try:
             vector_store.add_texts(
